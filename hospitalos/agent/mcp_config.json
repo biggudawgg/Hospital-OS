@@ -1,0 +1,70 @@
+{
+  "_comment": "Every MCP server the agent connects to. Placeholders: ${PYTHON} = this Python, ${ROOT} = hospitalos folder, ${SCRIPTS} = venv Scripts/bin folder, ${ANY_NAME} = value from .env. Set enabled=false to skip a server. allowed_tools limits which tools the agent may see. write_tools marks tools that need user confirmation (our custom servers mark this in their docstrings instead).",
+  "mcpServers": {
+    "beds": {
+      "description": "Custom: free beds, admit and discharge",
+      "command": "${PYTHON}",
+      "args": ["${ROOT}/mcp_servers/beds/server.py"],
+      "env": {"DATABASE_URL": "${DATABASE_URL}"},
+      "enabled": true
+    },
+    "patients": {
+      "description": "Custom: search patients, details and history",
+      "command": "${PYTHON}",
+      "args": ["${ROOT}/mcp_servers/patients/server.py"],
+      "env": {"DATABASE_URL": "${DATABASE_URL}"},
+      "enabled": true
+    },
+    "appointments": {
+      "description": "Custom: doctor availability, book and cancel appointments",
+      "command": "${PYTHON}",
+      "args": ["${ROOT}/mcp_servers/appointments/server.py"],
+      "env": {"DATABASE_URL": "${DATABASE_URL}"},
+      "enabled": true
+    },
+    "pharmacy": {
+      "description": "Custom: medicine stock, low stock, restock",
+      "command": "${PYTHON}",
+      "args": ["${ROOT}/mcp_servers/pharmacy/server.py"],
+      "env": {"DATABASE_URL": "${DATABASE_URL}"},
+      "enabled": true
+    },
+    "lab": {
+      "description": "Custom: pending tests, results, order tests",
+      "command": "${PYTHON}",
+      "args": ["${ROOT}/mcp_servers/lab/server.py"],
+      "env": {"DATABASE_URL": "${DATABASE_URL}"},
+      "enabled": true
+    },
+    "billing": {
+      "description": "Custom: bills, unpaid bills, mark paid",
+      "command": "${PYTHON}",
+      "args": ["${ROOT}/mcp_servers/billing/server.py"],
+      "env": {"DATABASE_URL": "${DATABASE_URL}"},
+      "enabled": true
+    },
+    "openfda": {
+      "description": "Custom: public FDA drug labels and reported side effects (needs internet)",
+      "command": "${PYTHON}",
+      "args": ["${ROOT}/mcp_servers/openfda/server.py"],
+      "env": {"OPENFDA_API_KEY": "${OPENFDA_API_KEY}"},
+      "enabled": true
+    },
+    "filesystem": {
+      "description": "Ready-made (@modelcontextprotocol/server-filesystem, npm): read/write files, restricted to reports/ only",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem@2.3.0", "${ROOT}/reports"],
+      "env": {},
+      "write_tools": ["write_file", "edit_file", "create_directory", "move_file"],
+      "enabled": false
+    },
+    "hospital_db": {
+      "description": "Ready-made (mcp-server-sqlite, PyPI): SQL queries on the hospital database, limited to read-only tools",
+      "command": "${SCRIPTS}/mcp-server-sqlite",
+      "args": ["--db-path", "${ROOT}/hospitalos.db"],
+      "env": {},
+      "allowed_tools": ["read_query", "list_tables", "describe_table"],
+      "enabled": false
+    }
+  }
+}

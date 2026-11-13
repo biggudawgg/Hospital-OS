@@ -14,6 +14,7 @@ Run from the `hospitalos/` directory:
 import asyncio
 import json
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -47,25 +48,22 @@ async def main():
             r2 = await session.call_tool("list_appointments", arguments={"patient_id": 1})
             print(r2.content[0].text)
 
-            print("\n3. Calling book_appointment(patient_id=3, doctor_id=2, datetime='2026-11-12T10:00')...")
+            # Always book in the future (a week from now, 11:00) so the test never goes stale
+            when = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%dT11:00")
+            print(f"\n3. Calling book_appointment(patient_id=3, doctor_id=2, datetime='{when}')...")
             r3 = await session.call_tool(
                 "book_appointment",
-                arguments={
-                    "patient_id": 3,
-                    "doctor_id": 2,
-                    "datetime": "2026-11-12T10:00",
-                },
+                arguments={"patient_id": 3, "doctor_id": 2, "datetime": when},
             )
             text3 = r3.content[0].text
             print(text3)
 
-            # Extract newly created appointment ID to cancel cleanly
-            booked_id = 1
+            # Cancel ONLY the appointment we just created (never a real one)
             try:
-                parsed = json.loads(text3)
-                booked_id = parsed.get("appointment", {}).get("id", 1)
-            except Exception:
-                pass
+                booked_id = json.loads(text3)["appointment"]["id"]
+            except (ValueError, KeyError):
+                print("\n4. Booking did not succeed, so there is nothing to cancel.")
+                return
 
             print(f"\n4. Calling cancel_appointment(appointment_id={booked_id})...")
             r4 = await session.call_tool(

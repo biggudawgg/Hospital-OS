@@ -11,7 +11,7 @@ Exposes 4 tools (2 READ tools and 2 WRITE tools requiring confirmation):
 
 import json
 import sys
-from datetime import datetime as dt, timezone
+from datetime import datetime as dt
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
@@ -186,7 +186,8 @@ def book_appointment(patient_id: int, doctor_id: int, datetime: str) -> str:
         parsed_dt = None
         for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
             try:
-                parsed_dt = dt.strptime(clean_dt_str, fmt).replace(tzinfo=timezone.utc)
+                # Stored as plain hospital-local time (no timezone), same as the seed data
+                parsed_dt = dt.strptime(clean_dt_str, fmt)
                 break
             except ValueError:
                 continue
@@ -196,6 +197,8 @@ def book_appointment(patient_id: int, doctor_id: int, datetime: str) -> str:
                 f"Friendly Error: Could not parse datetime '{datetime}'. "
                 f"Please use format 'YYYY-MM-DDTHH:MM' (for example: '2026-11-12T10:00')."
             )
+        if parsed_dt < dt.now():
+            return f"Friendly Error: {parsed_dt:%Y-%m-%d %H:%M} is in the past. Please choose a future time."
 
         with get_db_session() as db:
             patient = db.query(models.Patient).filter(models.Patient.id == patient_id).first()
@@ -210,6 +213,23 @@ def book_appointment(patient_id: int, doctor_id: int, datetime: str) -> str:
                 return (
                     f"Friendly Notice: {doctor.full_name} ({doctor.specialization}) is currently "
                     f"marked unavailable. Please choose an available doctor."
+                )
+
+            # Never double-book: same doctor (or same patient) already has a Scheduled visit at this time
+            clash = (
+                db.query(models.Appointment)
+                .filter(
+                    models.Appointment.status == "Scheduled",
+                    models.Appointment.appointment_time == parsed_dt,
+                    (models.Appointment.doctor_id == doctor.id) | (models.Appointment.patient_id == patient.id),
+                )
+                .first()
+            )
+            if clash:
+                who = doctor.full_name if clash.doctor_id == doctor.id else patient.full_name
+                return (
+                    f"Friendly Error: {who} already has an appointment at {parsed_dt:%Y-%m-%d %H:%M} "
+                    f"(appointment #{clash.id}). Use list_doctor_availability to find an open slot."
                 )
 
             new_appt = models.Appointment(

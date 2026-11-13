@@ -1,0 +1,28 @@
+/* Tailwind's three layers: base reset, component classes, utility classes */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+  }
+  h1, h2, h3 {
+    @apply font-display;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary-ring ring-offset-1;
+  }
+}
+
+/* Small reusable class names used across pages */
+@layer components {
+  .card { @apply rounded-card border border-line bg-surface shadow-card; }
+  .btn { @apply inline-flex items-center gap-2 rounded-control px-3.5 py-2 text-sm font-semibold transition-colors disabled:opacity-50; }
+  .btn-primary { @apply btn bg-primary text-white hover:bg-primary-hover; }
+  .btn-ghost { @apply btn border border-line bg-surface text-ink hover:bg-canvas; }
+  .input { @apply w-full rounded-control border border-line bg-surface px-3 py-2 text-sm placeholder:text-ink-subtle focus:border-primary; }
+  .th { @apply px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted; }
+  .td { @apply px-4 py-3 text-sm; }
+  .num { @apply font-mono tabular-nums; }
+}

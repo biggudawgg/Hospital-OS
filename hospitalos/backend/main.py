@@ -7,33 +7,59 @@ Interactive Swagger documentation is automatically available at:
   http://127.0.0.1:8000/docs
 """
 
+import os
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import List, Optional
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import models, schemas
-from .database import Base, engine, get_db
+# Make `import agent` work when uvicorn is started from the hospitalos/ folder
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from . import models, schemas  # noqa: E402
+from .agent_routes import lifespan, router as agent_router  # noqa: E402
+from .dashboard_routes import router as dashboard_router  # noqa: E402
+from .database import Base, engine, get_db  # noqa: E402
 
 # Create database tables automatically if they don't exist yet
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="HospitalOS API",
-    description="Open-source AI Hospital Management Platform REST API (Phase 1)",
+    description="Open-source AI Hospital Management Platform REST API + MCP AI agent",
     version="1.0.0",
+    lifespan=lifespan,  # starts/stops all MCP servers together with the API
 )
 
-# Enable CORS so the React frontend can talk to FastAPI
+# Enable CORS so the React frontend can talk to FastAPI.
+# FRONTEND_ORIGINS in .env (comma separated) limits who may call the API; default allows all.
+origins = [o.strip() for o in os.getenv("FRONTEND_ORIGINS", "*").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(agent_router)
+app.include_router(dashboard_router)
+
+# Fields that must only change through /beds/admit and /beds/discharge (keeps beds and patients in sync)
+PROTECTED_BED_FIELDS = {"is_occupied", "patient_id", "admitted_at", "discharged_at"}
+PROTECTED_PATIENT_FIELDS = {"is_admitted"}
+
+
+def reject_protected_fields(changes: dict, protected: set):
+    """Stop generic updates from desyncing bed occupancy and patient admission status."""
+    blocked = sorted(protected & changes.keys())
+    if blocked:
+        raise HTTPException(status_code=400, detail=(
+            f"Field(s) {', '.join(blocked)} can only be changed with POST /beds/admit or /beds/discharge."))
 
 
 @app.get("/", tags=["Health"])
@@ -284,7 +310,9 @@ def update_bed(bed_id: int, payload: schemas.BedUpdate, db: Session = Depends(ge
     bed = db.query(models.Bed).filter(models.Bed.id == bed_id).first()
     if not bed:
         raise HTTPException(status_code=404, detail=f"Bed with ID {bed_id} not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    reject_protected_fields(changes, PROTECTED_BED_FIELDS)
+    for field, value in changes.items():
         setattr(bed, field, value)
     db.commit()
     db.refresh(bed)
@@ -327,7 +355,9 @@ def update_patient(
     patient = db.query(models.Patient).filter(models.Patient.id == patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail=f"Patient with ID {patient_id} not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    reject_protected_fields(changes, PROTECTED_PATIENT_FIELDS)
+    for field, value in changes.items():
         setattr(patient, field, value)
     db.commit()
     db.refresh(patient)
